@@ -1,4 +1,7 @@
 import javax.swing.*;
+import javax.swing.filechooser.FileSystemView;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.TableColumn;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
@@ -6,11 +9,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 
+import static javax.swing.JOptionPane.YES_NO_OPTION;
 
 class GUI {
 
     private String APP_TITTLE = "APP";
     private JFrame frame;
+
+    private Desktop desktop;
 
     private JMenuBar jMenuBar;
     private JMenu fileMenu;
@@ -27,89 +33,108 @@ class GUI {
     private JButton goButton;
     private JButton upButton;
 
-    private JList mainList;
+    private JTable table;
     private JScrollPane listScrollPane;
+    private MyFileTableModel fileTableModel;
+    private boolean cellSizesSet = false;
+    private int rowIconPadding = 6;
+
+    private JMenuItem newFilePopupMenuItem;
+    private JMenuItem newFolderPopupMenuItem;
+    private JMenuItem deleteFilePopupMenuItem;
 
     private JPopupMenu rightClickPopupMenu;
 
     private JDialog newDialog;
 
     void mainFrameExecute() {
-        /** CREATE FRAME */
+        /* DESKTOP */
+        desktop = Desktop.getDesktop();
+
+        /* CREATE FRAME */
         frame = new JFrame(APP_TITTLE);
         frame.setLayout(new BorderLayout());
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         frame.setSize(800, 600);
 
-        /** CREATE MENU BAR */
+        /* CREATE MENU BAR */
         jMenuBar = new JMenuBar();
         fileMenu = new JMenu("File");
         newFileMenuItem = new JMenuItem("New file");
-        newFileMenuItem.addActionListener(new NewMenuItemActionListener());
+        newFileMenuItem.addActionListener(new NewFileMenuItemActionListener());
         fileMenu.add(newFileMenuItem);
-        deleteFileMenuItem = new JMenuItem("Delete");
-        deleteFileMenuItem.addActionListener(new DeleteMenuItemActionListener());
-        fileMenu.add(deleteFileMenuItem);
         newFolderMenuItem = new JMenuItem("New folder");
-        newFolderMenuItem.addActionListener();
+        newFolderMenuItem.addActionListener(new NewFolderMenuItemActionListener());
+        fileMenu.add(newFolderMenuItem);
+        fileMenu.addSeparator();
+        deleteFileMenuItem = new JMenuItem("Delete");
+        deleteFileMenuItem.addActionListener(new DeleteFileMenuItemActionListener());
+        fileMenu.add(deleteFileMenuItem);
         jMenuBar.add(fileMenu);
 
-        /** CREATE MAIN PANEL */
+        /* CREATE MAIN PANEL */
         mainPanel = new JPanel();
         mainPanel.setLayout(new BorderLayout());
 
-        /** CREATE DIRECTION TEXT FIELD */
+        /* CREATE DIRECTION TEXT FIELD */
         directionField = new JTextField("C:\\");
         directionField.setPreferredSize(new Dimension(600, 24));
         directionField.addKeyListener(new PressEnterKey());
 
-        /** CREATE GO BUTTON */
+        /* CREATE GO BUTTON */
         goButton = new JButton("Go");
         goButton.addActionListener(new GoButtonActionListener());
 
-        /** CREATE UP BUTTON */
+        /* CREATE UP BUTTON */
         upButton = new JButton("Up");
         upButton.addActionListener(new UpButtonActionListener());
 
-        /** CREATE RIGHT PANEL */
+        /* CREATE RIGHT PANEL */
         rightPanel = new JPanel();
 
-        /** CREATE DIRECTION PANEL */
+        /* CREATE DIRECTION PANEL */
         directionPanel = new JPanel();
         directionPanel.add(upButton);
         directionPanel.add(directionField);
         directionPanel.add(goButton);
 
-        /** CREATE J POPUP MENU */
+        /* CREATE POPUP MENU ITEM */
+        newFilePopupMenuItem = new JMenuItem("New file");
+        newFilePopupMenuItem.addActionListener(new NewFileMenuItemActionListener());
+        newFolderPopupMenuItem = new JMenuItem("New folder");
+        newFolderPopupMenuItem.addActionListener(new NewFolderMenuItemActionListener());
+        deleteFilePopupMenuItem = new JMenuItem("Delete");
+        deleteFilePopupMenuItem.addActionListener(new DeleteFileMenuItemActionListener());
+
+        /* CREATE J POPUP MENU */
         rightClickPopupMenu = new JPopupMenu();
-        rightClickPopupMenu.add(newFileMenuItem);
-        rightClickPopupMenu.add(deleteFileMenuItem);
+        rightClickPopupMenu.add(newFilePopupMenuItem);
+        rightClickPopupMenu.add(newFolderPopupMenuItem);
+        rightClickPopupMenu.addSeparator();
+        rightClickPopupMenu.add(deleteFilePopupMenuItem);
 
-        /** CREATE JLIST */
-        mainList = new JList();
-        mainList.setCellRenderer(new FileListCellRenderer());
-        mainList.addMouseListener(new ListMouseListener());
-        listScrollPane = new JScrollPane(mainList);
+        /* CREATE J TABLE */
+        table = new JTable(new MyFileTableModel(new File("C:\\").listFiles()));
+        listScrollPane = new JScrollPane(table);
+        table.addMouseListener(new TableMouseListener());
 
-        /** ADD ELEMENTS TO MAIN PANEL */
+        /* ADD ELEMENTS TO MAIN PANEL */
         mainPanel.add(directionPanel, BorderLayout.NORTH);
         mainPanel.add(rightPanel, BorderLayout.EAST);
         mainPanel.add(listScrollPane, BorderLayout.CENTER);
 
-        /** ADD ELEMENTS TO MAINFRAME */
+        /* ADD ELEMENTS TO MAINFRAME */
         frame.add(mainPanel, BorderLayout.CENTER);
         frame.setJMenuBar(jMenuBar);
 
-        /** SHOW MAINFRAME */
+        /* SHOW MAINFRAME */
         frame.setVisible(true);
     }
 
-    /**
-     * METHOD FOR GUI
-     */
-    void showListOfFile() {
-        File[] files = new File(directionField.getText()).listFiles();
-        mainList.setListData(files);
+    void showFile() {
+        String dir = directionField.getText();
+        File[] files = new File(dir).listFiles();
+        setTableData(files);
     }
 
     void createNewFile() {
@@ -125,32 +150,38 @@ class GUI {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        showFile();
     }
 
     void createNewFolder() {
         newDialog = new JDialog();
         String newFolderName = JOptionPane.showInputDialog(frame, "input folder name");
-
         File tempFolder = new File(directionField.getText() + "\\" + newFolderName);
         if (tempFolder.mkdir()) {
             System.out.println("Folder created.");
         } else {
             System.out.println("Folder doesn't created. ");
         }
-
+        showFile();
 
     }
 
     void deleteFile() {
-        if (mainList.getSelectedValuesList().size() > 1) {
-            ArrayList<Object> tempFilesList = new ArrayList<>(mainList.getSelectedValuesList());
+        newDialog = new JDialog();
+        boolean confirm;
+        /**
+         * TODO:
+         *  Dialog potwierdzenia delete i delete
+         */
+        if (table.getSelectionModel().getSelectedItemsCount() > 1) {
+            ArrayList<Object> tempFilesList = new ArrayList<>(table.getSelectionModel().getSelectedItemsCount());
             for (Object file : tempFilesList) {
                 File tempFile = new File(file.toString());
                 tempFile.delete();
                 System.out.println(tempFile.getName() + " file deleted.");
             }
-        } else if (mainList.getSelectedValuesList().size() == 1) {
-            File tempFile = new File(mainList.getSelectedValue().toString());
+        } else if (table.getSelectionModel().getSelectedItemsCount() == 1) {
+            File tempFile = new File();
             tempFile.delete();
             System.out.println(tempFile.getName() + " file deleted.");
         }
@@ -177,23 +208,58 @@ class GUI {
         }
     }
 
-    /**
-     * SUBCLASS FOR SUPPORT
-     */
+    void setTableData(File[] files) {
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                if (fileTableModel == null) {
+                    fileTableModel = new MyFileTableModel(new File("C:\\").listFiles());
+                    table.setModel(fileTableModel);
+                }
+                fileTableModel.setFiles(files);
+                if (!cellSizesSet) {
+                    Icon icon = FileSystemView.getFileSystemView().getSystemIcon(files[0]);
 
-    class NewMenuItemActionListener implements ActionListener {
+                    table.setRowHeight(icon.getIconHeight() + rowIconPadding);
+                    setColumnWidth(0, -1);
+                }
+            }
+
+        });
+    }
+
+    private void setColumnWidth(int column, int width) {
+        TableColumn tableColumn = table.getColumnModel().getColumn(column);
+        if (width < 0) {
+            // use the preferred width of the header..
+            JLabel label = new JLabel((String) tableColumn.getHeaderValue());
+            Dimension preferred = label.getPreferredSize();
+            // altered 10->14 as per camickr comment.
+            width = (int) preferred.getWidth() + 14;
+        }
+        tableColumn.setPreferredWidth(width);
+        tableColumn.setMaxWidth(width);
+        tableColumn.setMinWidth(width);
+    }
+
+    class NewFileMenuItemActionListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
             createNewFile();
-            showListOfFile();
         }
     }
 
-    class DeleteMenuItemActionListener implements ActionListener {
+    class NewFolderMenuItemActionListener implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            createNewFolder();
+        }
+    }
+
+    class DeleteFileMenuItemActionListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
             deleteFile();
-            showListOfFile();
         }
     }
 
@@ -210,7 +276,7 @@ class GUI {
         public void keyReleased(KeyEvent e) {
             int key = e.getKeyCode();
             if (key == KeyEvent.VK_ENTER) {
-                showListOfFile();
+                showFile();
             }
         }
     }
@@ -218,7 +284,7 @@ class GUI {
     class GoButtonActionListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
-            showListOfFile();
+            showFile();
         }
     }
 
@@ -226,27 +292,27 @@ class GUI {
         @Override
         public void actionPerformed(ActionEvent e) {
             try {
-                Path tempDir = Paths.get(directionField.getText());
-                directionField.setText(tempDir.getParent().toString());
-                File[] files = new File(directionField.getText()).listFiles();
-                mainList.setListData(files);
-            } catch (NullPointerException e1) {
-                System.out.println("It is impossible.");
+                Path tempPath = Paths.get(directionField.getText());
+                String tempDir = tempPath.getParent().toString();
+                directionField.setText(tempDir);
+                showFile();
+
+            } catch (NullPointerException ex) {
+                System.out.println("I can't do that");
             }
         }
     }
 
-    class ListMouseListener implements MouseListener {
+    class TableMouseListener implements MouseListener {
         @Override
         public void mouseClicked(MouseEvent e) {
             if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-                String tempDir = mainList.getSelectedValue().toString();
-                directionField.setText(tempDir);
+                int tempDirInt = table.getSelectedRow();
                 File[] files = new File(directionField.getText()).listFiles();
-                mainList.setListData(files);
+                File tempFile = files[tempDirInt].getAbsoluteFile();
+                directionField.setText(tempFile.toString());
+                showFile();
             }
-
-
         }
 
         @Override
@@ -256,11 +322,11 @@ class GUI {
         @Override
         public void mouseReleased(MouseEvent e) {
             if (SwingUtilities.isRightMouseButton(e) && e.getClickCount() == 1) {
-                if (!mainList.isSelectionEmpty()) {
-                    if (e.isPopupTrigger()) {
-                        rightClickPopupMenu.show(e.getComponent(), e.getX(), e.getY());
-                    }
+
+                if (e.isPopupTrigger()) {
+                    rightClickPopupMenu.show(e.getComponent(), e.getX(), e.getY());
                 }
+
             }
         }
 
@@ -270,6 +336,58 @@ class GUI {
 
         @Override
         public void mouseExited(MouseEvent e) {
+        }
+
+    }
+
+    static class MyFileTableModel extends AbstractTableModel {
+        private File[] files;
+        private String[] columnNames = {
+                "ico", "Name", "Path"};
+
+        MyFileTableModel(File[] files) {
+            this.files = files;
+        }
+
+        @Override
+        public int getRowCount() {
+            return files.length;
+        }
+
+        @Override
+        public int getColumnCount() {
+            return columnNames.length;
+        }
+
+        @Override
+        public String getColumnName(int col) {
+            return columnNames[col];
+        }
+
+        @Override
+        public Object getValueAt(int rowIndex, int columnIndex) {
+
+            File file = files[rowIndex];
+            switch (columnIndex) {
+                case 0:
+                    return FileSystemView.getFileSystemView().getSystemIcon(file);
+                case 1:
+                    return FileSystemView.getFileSystemView().getSystemDisplayName(file);
+                case 2:
+                    return file.getPath();
+
+            }
+            return "";
+        }
+
+        @Override
+        public Class getColumnClass(int col) {
+            return getValueAt(0, col).getClass();
+        }
+
+        public void setFiles(File[] files) {
+            this.files = files;
+            fireTableDataChanged();
         }
     }
 
