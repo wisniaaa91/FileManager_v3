@@ -248,10 +248,18 @@ class GUI {
             }
         }
     }
-
+    
     /**
      * TODO:
-     * Zrobić metode getFiles(directionField.getText()).listFiles();
+     *  Zrobić metode getFiles(directionField.getText()).listFiles();
+     * TODO:
+     *  Zrobić Paste (metoda + przyciski)
+     * TODO:
+     *  zrobić przyciski lub menu do zmiany wygladu programu.
+     * TODO:
+     *  ZAKŁADKI, dodaj zakładkę, usuń zakładkę
+     * TODO:
+     *  drugi widok z zakładkami
      */
 
     private File getCopyFileSource() {
